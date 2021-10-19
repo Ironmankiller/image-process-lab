@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
 		return -1;
 	imshow("input", input);//显示原图
 
-	cv::Mat ideal = ideal_Low_Pass_Filter(input, 100);
+	cv::Mat ideal = ideal_Low_Pass_Filter(input, 50);
 	ideal = ideal(cv::Rect(0, 0, input.cols, input.rows));
 	imshow("理想", ideal);
 	waitKey();
@@ -51,7 +51,7 @@ cv::Mat ideal_Low_Pass_Filter(Mat &src, float sigma)
 	int N = getOptimalDFTSize(src.cols);
 	Mat padded;                 //调整图像加速傅里叶变换
 	copyMakeBorder(src, padded, 0, M - src.rows, 0, N - src.cols, BORDER_CONSTANT, Scalar::all(0));
-	padded.convertTo(padded, CV_32FC1); //将图像转换为flaot型
+	padded.convertTo(padded, CV_32FC1); //将图像转换为float型
 
 	Mat ideal_kernel = ideal_lbrf_kernel(padded, sigma);//理想低通滤波器
 	Mat result = freqfilt(padded, ideal_kernel);
