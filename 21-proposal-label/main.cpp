@@ -419,6 +419,7 @@ void LabelColor(const cv::Mat& labelImg, cv::Mat& colorLabelImg)
 			}
 		}
 	}
+
 	printf("color num : %d \n", num);
 }
 
@@ -426,7 +427,7 @@ void LabelColor(const cv::Mat& labelImg, cv::Mat& colorLabelImg)
 int main()
 {
 
-	cv::Mat binImage = cv::imread("C:/Users/spy/Desktop/3.png", 0);
+	cv::Mat binImage = cv::imread("3.png", 0);
 	cv::threshold(binImage, binImage, 50, 1, THRESH_BINARY);
 	cv::Mat labelImg;
 	double time;
@@ -443,10 +444,10 @@ int main()
 	LabelColor(labelImg, colorLabelImg);
 	cv::imshow("colorImg", colorLabelImg);
 	//ª“∂»œ‘ æ
-	cv::Mat grayImg;
-	labelImg *= 10;
-	labelImg.convertTo(grayImg, CV_8UC1);
-	cv::imshow("labelImg", grayImg);
+	//cv::Mat grayImg;
+	//labelImg *= 10;
+	//labelImg.convertTo(grayImg, CV_8UC1);
+	//cv::imshow("labelImg", grayImg);
 	double minval, maxval;
 	minMaxLoc(labelImg, &minval, &maxval);
 	cout << "minval" << minval << endl;
