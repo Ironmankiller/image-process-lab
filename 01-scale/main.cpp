@@ -65,6 +65,7 @@ void resize_personal(cv::Mat& src, cv::Mat& dst, const Size& size ,double fx = 0
 #pragma omp parallel for schedule(dynamic)
 	for (int i = 0; i < dst.rows; i++) {
 		double index_i = (i + 0.5) * ifx - 0.5;
+		//double index_i = (i ) * ifx ;
 		if (index_i < 0) index_i = 0;
 		if (index_i >= src.rows - 1) index_i = src.rows - 1;
 		int i1 = floor(index_i);
@@ -73,6 +74,7 @@ void resize_personal(cv::Mat& src, cv::Mat& dst, const Size& size ,double fx = 0
 		for (int j = 0; j < dst.cols; j++) {
 
 			double index_j = (j + 0.5) * ify - 0.5;
+			//double index_j = (j ) * ify;
 			if (index_j < 0) index_j = 0;
 			if (index_j >= src.cols - 1) index_j = src.cols - 1;
 			int j1 = floor(index_j);
@@ -104,9 +106,9 @@ int main(int argc, char** argv)
 		img = imread(argv[1], IMREAD_COLOR);
 	}
 	else {
-		rows = 1000;
-		cols = 500;
-		img = imread("../../2.ppm", IMREAD_COLOR);
+		rows = 900;
+		cols = 900;
+		img = imread("1.png", IMREAD_COLOR);
 	}
 
 	
@@ -122,7 +124,7 @@ int main(int argc, char** argv)
 
 	// 2. 显示官方resize实现结果
 	clock_t s = start();
-	resize(img, img_offical, Size(rows, cols));
+	resize(img, img_offical, Size(cols, rows));
 	printf("<<<<<Official Resize Duration: %lf>>>>>>>\n", finish(s));
 	namedWindow("Official Resized Image", WINDOW_AUTOSIZE);
 	imshow("Official Resized Image", img_offical);
@@ -131,13 +133,14 @@ int main(int argc, char** argv)
 	// 3. 显示个人resize实现结果
 	s = start();
 
-	resize_personal(img, img_personal, Size(rows, cols));
+	resize_personal(img, img_personal, Size(cols, rows));
 	printf("<<<<<Personal Resize Duration: %lf>>>>>>>\n", finish(s));
 	namedWindow("Personal Resized Image", WINDOW_AUTOSIZE);
 	imshow("Personal Resized Image", img_personal);
 
 
-
+	Mat diffImg = img_offical - img_personal;
+	imshow("Difference of two achievement", diffImg);
 
 	waitKey(0); // 任意键退出
 	return 0;

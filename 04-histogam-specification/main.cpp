@@ -1,6 +1,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
+#include<opencv2/imgproc/imgproc_c.h>
 #include <opencv2/imgproc.hpp>
 #include <iostream>
 #include <stdio.h>
@@ -8,6 +9,7 @@
 #include <omp.h>
 #include <math.h>
 #include <map>
+#include <string>
 
 #define PI 3.1415926535
 
@@ -19,6 +21,27 @@ clock_t start() {
 
 double finish(clock_t start) {
 	return (double)(clock() - start) / CLOCKS_PER_SEC;
+}
+
+void histogram_draw(Mat& imageGray, string name) {
+	const int histSize = 255;   //定义灰度级数量
+	float histR[] = { 0,255 };   //定义每个灰度级下取值范围
+	const float *histRange = histR;
+	Mat imageHist, imageNormalize;
+
+	//计算直方图
+	calcHist(&imageGray, 1, 0, Mat(), imageHist, 1, &histSize, &histRange, true, false);
+	//直方图归一化到范围[0,histSize]
+	normalize(imageHist, imageNormalize, 0, histSize, NORM_MINMAX, -1, Mat());
+	//创建直方图画布
+	Mat imageShowHist(histSize, histR[1], CV_8UC3, Scalar(0, 0, 0));
+	for (int i = 0; i < histSize; i++)
+	{
+		line(imageShowHist, Point(i, histR[1]), Point(i, histR[1] - cvRound(imageNormalize.at<float>(i))), Scalar(0, 0, 255), 1, 8, 0);
+	}
+	imshow(name, imageShowHist);
+
+
 }
 
 void histogram_specification(Mat& src, Mat& dst, float target_hist[]) {
@@ -46,10 +69,12 @@ void histogram_specification(Mat& src, Mat& dst, float target_hist[]) {
 
 	// 均衡化，得到均衡化映射S(r)，其中r是原图的灰度级
 	int hist_map[256] = { 0 };
-	int total = height * width;
+	float total = height * width;
+
 	for (int i = 0; i < 256; i++) {
 		hist_map[i] = (int)((255.0f * (float)prefix_sum[i] / total) + 0.5);
 	}
+	//histogram_draw(hist_map, 256, "junhenghua");
 
 	// 对target_hist同理操作，先计算前缀和，然后均衡化得到映射V(z)，其中z是目标图像灰度级
 	prefix_sum[0] = target_hist[0];
@@ -86,7 +111,6 @@ void histogram_specification(Mat& src, Mat& dst, float target_hist[]) {
 		map[i] = z;
 	}
 
-
 	// 对原图进行直方图规定化
 #pragma omp parallel for schedule(dynamic)
 	for (int i = 0; i < height; i++) {
@@ -99,33 +123,33 @@ void histogram_specification(Mat& src, Mat& dst, float target_hist[]) {
 
 void build_target_hist(float target[]) {
 	// 在此构建目标直方图
-	for (int i = 128; i < 256; i++) {
-		target[i] = 0.5 * 1.0 / 256.0;
-	}
-	for (int i = 0; i < 129; i++) {
-		target[i] = 1.5 * 1.0 / 256.0;
-	}
-
-	//// 先利用均衡化的直方图测试一下代码是否正确
-	//for (int i = 0; i < 256; i++) {
-	//	target[i] = 1.0 / 256.0;
+	//for (int i = 128; i < 256; i++) {
+	//	target[i] = 0.5 * 1.0 / 256.0;
 	//}
+	//for (int i = 0; i < 129; i++) {
+	//	target[i] = 1.5 * 1.0 / 256.0;
+	//}
+
+	// 先利用均衡化的直方图测试一下代码是否正确
+	for (int i = 0; i < 256; i++) {
+		target[i] = 1.0 / 256.0;
+	}
 }
 
 
 int main(int argc, char** argv)
 {
-	if (argc != 2)
-	{
-		fprintf(stderr,
-			"Usage: %s\n"
-			"\t[imge path]\n",
-			argv[0]);
-		return -1;
-	}
-	Mat img, img_gray, offical_hist_equalize,img_personal;
 
-	img = imread(argv[1], IMREAD_COLOR);
+	Mat img, img_gray, offical_hist_equalize, img_personal;
+	if (argc == 2)
+	{
+		img = imread(argv[1], IMREAD_COLOR);
+	}
+	else {           //default
+		img = imread("1.tiff", IMREAD_COLOR);
+	}
+
+
 
 	if (img.empty())
 	{
@@ -135,8 +159,8 @@ int main(int argc, char** argv)
 	cvtColor(img, img_gray, COLOR_BGR2GRAY);
 
 	// 1. 显示原图
-	namedWindow("Origin Image", WINDOW_AUTOSIZE);
 	imshow("Origin Gray Image", img_gray);
+	histogram_draw(img_gray, "Origin Hist");
 
 	// 2. 显示官方直方图均衡化结果
 	clock_t s = start();
@@ -144,6 +168,7 @@ int main(int argc, char** argv)
 	printf("<<<<<Offical Histogram Equalize Duration: %lf>>>>>>>\n", finish(s));
 	namedWindow("Offical Histogram Equalize Image", WINDOW_AUTOSIZE);
 	imshow("Offical Histogram Equalize Image", offical_hist_equalize);
+	histogram_draw(offical_hist_equalize, "Offical Hist");
 
 	// 3. 显示个人直方图规定化实现结果
 	float target_hist[256] = { 0 };
@@ -153,6 +178,7 @@ int main(int argc, char** argv)
 	printf("<<<<<Personal Histogram Specification Duration: %lf>>>>>>>\n", finish(s));
 	namedWindow("Personal Histogram Specification Image", WINDOW_AUTOSIZE);
 	imshow("Personal Histogram Specification Image", img_personal);
+	histogram_draw(img_personal, "Personal Hist");
 
 
 

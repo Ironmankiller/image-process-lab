@@ -44,14 +44,14 @@ void rotate_personal(Mat& src, Mat& dst, const double& angle) {
 	// 旋转后的四个点的坐标
 	// 2 4
 	// 1 3
-	auto dstX1 = (srcX1 * cosa - srcY1 * sina);
-	auto dstY1 = (srcX1 * sina + srcY1 * cosa);
-	auto dstX2 = (srcX2 * cosa - srcY2 * sina);
-	auto dstY2 = (srcX2 * sina + srcY2 * cosa);
-	auto dstX3 = (srcX3 * cosa - srcY3 * sina);
-	auto dstY3 = (srcX3 * sina + srcY3 * cosa);
-	auto dstX4 = (srcX4 * cosa - srcY4 * sina);
-	auto dstY4 = (srcX4 * sina + srcY4 * cosa);
+	auto dstX1 = (srcX1 * cosa + srcY1 * sina);
+	auto dstY1 = (-srcX1 * sina + srcY1 * cosa);
+	auto dstX2 = (srcX2 * cosa + srcY2 * sina);
+	auto dstY2 = (-srcX2 * sina + srcY2 * cosa);
+	auto dstX3 = (srcX3 * cosa + srcY3 * sina);
+	auto dstY3 = (-srcX3 * sina + srcY3 * cosa);
+	auto dstX4 = (srcX4 * cosa + srcY4 * sina);
+	auto dstY4 = (-srcX4 * sina + srcY4 * cosa);
 
 	// 计算最大宽度和高度，做为变换后图像的大小
 	auto dst_width = (int)max(fabs(dstX1 - dstX4), fabs(dstX2 - dstX3)) + 1;
@@ -116,8 +116,8 @@ int main(int argc, char** argv)
 		img = imread(argv[1], IMREAD_COLOR);
 	}
 	else {           //default
-		angle = 30;
-		img = imread("../../1.tif");
+		angle = 1000;
+		img = imread("1.tiff");
 	}
 
 	if (img.empty())
@@ -128,6 +128,7 @@ int main(int argc, char** argv)
 
 	// 1. 显示原图
 	namedWindow("Origin Image", WINDOW_AUTOSIZE);
+
 	imshow("Origin Image", img);
 
 	// 2. 显示个人rotate实现结果

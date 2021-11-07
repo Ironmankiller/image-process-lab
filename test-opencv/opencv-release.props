@@ -3,14 +3,14 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <IncludePath>D:\Program Files\opencv-4.5.3\include\opencv2;D:\Program Files\opencv-4.5.3\include;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Program Files\opencv-4.5.3\x64\vc16\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>D:\Program Files\opencv-4.5.3\build\include\opencv2;D:\Program Files\opencv-4.5.3\build\include;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\Program Files\opencv-4.5.3\build\x64\vc15\lib;$(LibraryPath)</LibraryPath>
     <ReferencePath>$(ReferencePath)</ReferencePath>
-    <ExecutablePath>D:\Program Files\opencv-4.5.3\x64\vc16\bin;$(ExecutablePath)</ExecutablePath>
+    <ExecutablePath>D:\Program Files\opencv-4.5.3\build\x64\vc15\bin;$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
-      <AdditionalDependencies>opencv_core453.lib;opencv_imgcodecs453.lib;opencv_imgproc453.lib;opencv_highgui453.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opencv_world453.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup />
