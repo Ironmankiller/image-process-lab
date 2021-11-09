@@ -55,6 +55,7 @@ void find_contour_personal(Mat& img, vector<Point>& cont)
 				start_x = i;
 				start_y = j;
 				start_flag = true;
+				break;
 			}
 		}
 		if (start_flag) {
@@ -65,15 +66,18 @@ void find_contour_personal(Mat& img, vector<Point>& cont)
 		return;
 	}
 	const int neibor_len = 8;
-	int neibor[neibor_len * 2] = { 0, 1, -1, 1, -1, 0, -1, -1, 0, -1, 1, -1, 1, 0, 1, 1 };  // 领域点，两两一组
-	int temp = 2;   // 链码值，从2号位开始
+	//int neibor[neibor_len][2] = { {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1} };  // 逆时针链码，两两一组
+	//int temp = 5;   // 链码值，从5号位，左下方开始
+
+	int neibor[neibor_len][2] = { {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1}, {-1, 0}, {-1, 1} }; // 顺时针链码
+	int temp = 0;   // 链码值，从0号位，正右开始
 	cont.push_back(Point(start_y, start_x));
 
 	int current_x = start_x; 
 	int current_y = start_y;
 
-	int neibor_x = current_x + neibor[temp*2];
-	int neibor_y = current_y + neibor[temp*2 + 1];
+	int neibor_x = current_x + neibor[temp][0];
+	int neibor_y = current_y + neibor[temp][1];
 
 	do {
 		bool find_contour_point = false;
@@ -83,20 +87,20 @@ void find_contour_personal(Mat& img, vector<Point>& cont)
 				current_x = neibor_x;
 				current_y = neibor_y;
 				cont.push_back(Point(neibor_y, neibor_x));
-				temp = temp + 2;
-				if (temp >= neibor_len) {
-					temp -= neibor_len;
+				temp = temp - 2;
+				if (temp < 0) {
+					temp += neibor_len;
 				}
 				find_contour_point = true;
 			}
 			else {
-				temp--;
-				if (temp < 0) {
-					temp += neibor_len;
+				temp++;
+				if (temp >= neibor_len) {
+					temp -= neibor_len;
 				}
 			}
-			neibor_x = current_x + neibor[temp * 2];
-			neibor_y = current_y + neibor[temp *2 + 1];
+			neibor_x = current_x + neibor[temp][0];
+			neibor_y = current_y + neibor[temp][1];
 		}
 		if (!find_contour_point) {
 			cont.clear();
@@ -135,27 +139,24 @@ void imshow_contour(Mat& img, vector<Point>& cont, bool isOffical)
 
 int main(int argc, char** argv)
 {
-	if (argc != 2)
-	{
-		fprintf(stderr,
-			"Usage: %s\n"
-			"\t[imge path]\n",
-			argv[0]);
-		return -1;
-	}
 	Mat img;
+	if (argc == 2)
+	{
+		img = imread(argv[1], IMREAD_GRAYSCALE);
+	}
+	else {
+		img = imread("2.png", IMREAD_GRAYSCALE);
+	}
 
-	img = imread(argv[1], IMREAD_GRAYSCALE);
 
 	if (img.empty())
 	{
 		fprintf(stderr, "Could not open or find the image");
 		return -1;
 	}
-	resize(img, img, Size(300, 300));
 	// 测试轮廓位于边界的情况，测试通过
-	// img = img(Rect(160, 40, 140, 260));
-	threshold(img, img, 127, 255, THRESH_BINARY);
+	//img = img(Rect(140, 40, 140, 260));
+	threshold(img, img, 50, 255, THRESH_BINARY);
 
 	// 1. 显示原图
 	namedWindow("Origin Binary Image", WINDOW_AUTOSIZE);
