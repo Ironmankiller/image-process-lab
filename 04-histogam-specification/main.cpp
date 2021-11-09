@@ -31,18 +31,18 @@ void histogram_draw(Mat& imageGray, string name) {
 
 	//计算直方图
 	calcHist(&imageGray, 1, 0, Mat(), imageHist, 1, &histSize, &histRange, true, false);
+
 	//直方图归一化到范围[0,histSize]
 	normalize(imageHist, imageNormalize, 0, histSize, NORM_MINMAX, -1, Mat());
 	//创建直方图画布
-	Mat imageShowHist(histSize, histR[1], CV_8UC3, Scalar(0, 0, 0));
+	Mat imageShowHist(histSize, histR[1], CV_8UC3, Scalar(255, 255, 255));
 	for (int i = 0; i < histSize; i++)
 	{
 		line(imageShowHist, Point(i, histR[1]), Point(i, histR[1] - cvRound(imageNormalize.at<float>(i))), Scalar(0, 0, 255), 1, 8, 0);
 	}
 	imshow(name, imageShowHist);
-
-
 }
+
 
 void histogram_specification(Mat& src, Mat& dst, float target_hist[]) {
 	int height = src.rows;
@@ -136,31 +136,52 @@ void build_target_hist(float target[]) {
 	}
 }
 
+void build_target_hist(float target[], Mat& target_img) {
+
+	Mat imageHist, imageNormalize;
+	float histR[] = { 0,255 };   //定义每个灰度级下取值范围
+	const int histSize = 255;   //定义灰度级数量
+	const float *histRange = histR;
+	calcHist(&target_img, 1, 0, Mat(), imageHist, 1, &histSize, &histRange, true, false);
+	float total = target_img.rows * target_img.cols;
+	for (int i = 0; i < histSize + 1; i++) {
+		target[i] = ((float *)imageHist.data)[i] / total;
+	}
+}
 
 int main(int argc, char** argv)
 {
 
-	Mat img, img_gray, offical_hist_equalize, img_personal;
-	if (argc == 2)
+	Mat img, target_img, img_gray, target_img_gray, offical_hist_equalize, img_personal;
+	if (argc == 3)
 	{
 		img = imread(argv[1], IMREAD_COLOR);
+		target_img = imread(argv[1], IMREAD_COLOR);
 	}
 	else {           //default
 		img = imread("1.tiff", IMREAD_COLOR);
+		target_img = imread("2.tiff", IMREAD_COLOR);
 	}
 
 
-
-	if (img.empty())
+	if (img.empty() || target_img.empty())
 	{
 		fprintf(stderr, "Could not open or find the image");
 		return -1;
 	}
+	resize(img, img, Size(256, 256));
+	resize(target_img, target_img, Size(256, 256));
 	cvtColor(img, img_gray, COLOR_BGR2GRAY);
+	cvtColor(target_img, target_img_gray, COLOR_BGR2GRAY);
 
-	// 1. 显示原图
+	// 1.1. 显示原图和直方图
 	imshow("Origin Gray Image", img_gray);
 	histogram_draw(img_gray, "Origin Hist");
+
+
+	// 1.2. 显示目标图和直方图
+	imshow("Target Gray Image", target_img_gray);
+	histogram_draw(target_img_gray, "Target Hist");
 
 	// 2. 显示官方直方图均衡化结果
 	clock_t s = start();
@@ -172,16 +193,14 @@ int main(int argc, char** argv)
 
 	// 3. 显示个人直方图规定化实现结果
 	float target_hist[256] = { 0 };
-	build_target_hist(target_hist);
+	//build_target_hist(target_hist);
+	build_target_hist(target_hist, target_img_gray);
 	s = start();
 	histogram_specification(img_gray, img_personal, target_hist);
 	printf("<<<<<Personal Histogram Specification Duration: %lf>>>>>>>\n", finish(s));
 	namedWindow("Personal Histogram Specification Image", WINDOW_AUTOSIZE);
 	imshow("Personal Histogram Specification Image", img_personal);
 	histogram_draw(img_personal, "Personal Hist");
-
-
-
 
 	waitKey(0); // 任意键退出
 	return 0;
