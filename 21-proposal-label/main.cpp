@@ -8,96 +8,219 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-
 using namespace std;
 using namespace cv;
 
-
-//------------------------------【两步法新改进版】----------------------------------------------
-// 对二值图像进行连通区域标记,从1开始标号
-void  Two_PassNew(const Mat& bwImg, Mat& labImg)
+void fillRunVectors(const Mat& bwImage, int& NumberOfRuns, vector<int>& stRun, vector<int>& enRun, vector<int>& rowRun)
 {
-	assert(bwImg.type() == CV_8UC1);
-	labImg.create(bwImg.size(), CV_32SC1);   //bwImg.convertTo( labImg, CV_32SC1 );
-	labImg = Scalar(0);
-	labImg.setTo(Scalar(1), bwImg);
-	assert(labImg.isContinuous());
-	const int Rows = bwImg.rows - 1, Cols = bwImg.cols - 1;
-	int label = 1;
-	vector<int> labelSet;
-	labelSet.push_back(0);
-	labelSet.push_back(1);
-	//the first pass
-	int* data_prev = (int*)labImg.data;   //0-th row : int* data_prev = labImg.ptr<int>(i-1);
-	int* data_cur = (int*)(labImg.data + labImg.step); //1-st row : int* data_cur = labImg.ptr<int>(i);
-	for (int i = 1; i < Rows; i++)
+	for (int i = 0; i < bwImage.rows; i++)
 	{
-		data_cur++;
-		data_prev++;
-		for (int j = 1; j < Cols; j++, data_cur++, data_prev++)
+		const uchar* rowData = bwImage.ptr<uchar>(i);
+
+		if (rowData[0] == 1)
 		{
-			if (*data_cur != 1)
-				continue;
-			int left = *(data_cur - 1);
-			int up = *data_prev;
-			int neighborLabels[2];
-			int cnt = 0;
-			if (left > 1)
-				neighborLabels[cnt++] = left;
-			if (up > 1)
-				neighborLabels[cnt++] = up;
-			if (!cnt)
+			NumberOfRuns++;
+			stRun.push_back(0);
+			rowRun.push_back(i);
+		}
+		for (int j = 1; j < bwImage.cols; j++)
+		{
+			if (rowData[j - 1] == 0 && rowData[j] == 1)
 			{
-				labelSet.push_back(++label);
-				labelSet[label] = label;
-				*data_cur = label;
-				continue;
+				NumberOfRuns++;
+				stRun.push_back(j);
+				rowRun.push_back(i);
 			}
-			int smallestLabel = neighborLabels[0];
-			if (cnt == 2 && neighborLabels[1] < smallestLabel)
-				smallestLabel = neighborLabels[1];
-			*data_cur = smallestLabel;
-			// 保存最小等价表
-			for (int k = 0; k < cnt; k++)
+			else if (rowData[j - 1] == 1 && rowData[j] == 0)
 			{
-				int tempLabel = neighborLabels[k];
-				int& oldSmallestLabel = labelSet[tempLabel];  //这里的&不是取地址符号,而是引用符号
-				if (oldSmallestLabel > smallestLabel)
-				{
-					labelSet[oldSmallestLabel] = smallestLabel;
-					oldSmallestLabel = smallestLabel;
-				}
-				else if (oldSmallestLabel < smallestLabel)
-					labelSet[smallestLabel] = oldSmallestLabel;
+				enRun.push_back(j - 1);
 			}
 		}
-		data_cur++;
-		data_prev++;
-	}
-	//更新等价队列表,将最小标号给重复区域
-	for (size_t i = 2; i < labelSet.size(); i++)
-	{
-		int curLabel = labelSet[i];
-		int prelabel = labelSet[curLabel];
-		while (prelabel != curLabel)
+		if (rowData[bwImage.cols - 1])
 		{
-			curLabel = prelabel;
-			prelabel = labelSet[prelabel];
+			enRun.push_back(bwImage.cols - 1);
 		}
-		labelSet[i] = curLabel;
-	}
-	//second pass
-	data_cur = (int*)labImg.data;
-	for (int i = 0; i < Rows; i++)
-	{
-		for (int j = 0; j < bwImg.cols - 1; j++, data_cur++)
-			*data_cur = labelSet[*data_cur];
-		data_cur++;
 	}
 }
 
-//-------------------------------【老版两步法】-------------------------------------------
-void Two_PassOld(const cv::Mat& _binImg, cv::Mat& _lableImg)
+
+void firstPass(vector<int>& stRun, vector<int>& enRun, vector<int>& rowRun, int NumberOfRuns,
+	vector<int>& runLabels, vector<pair<int, int>>& equivalences, int offset)
+{
+	runLabels.assign(NumberOfRuns, 0);
+	int idxLabel = 1;
+	int curRowIdx = 0;
+	int firstRunOnCur = 0;
+	int firstRunOnPre = 0;
+	int lastRunOnPre = -1;
+	for (int i = 0; i < NumberOfRuns; i++)
+	{
+		if (rowRun[i] != curRowIdx)
+		{
+			curRowIdx = rowRun[i];
+			firstRunOnPre = firstRunOnCur;
+			lastRunOnPre = i - 1;
+			firstRunOnCur = i;
+
+		}
+		for (int j = firstRunOnPre; j <= lastRunOnPre; j++)
+		{
+			if (stRun[i] <= enRun[j] + offset && enRun[i] >= stRun[j] - offset && rowRun[i] == rowRun[j] + 1)
+			{
+				if (runLabels[i] == 0) // 没有被标号过
+					runLabels[i] = runLabels[j];
+				else if (runLabels[i] != runLabels[j])// 已经被标号             
+					equivalences.push_back(make_pair(runLabels[i], runLabels[j])); // 保存等价对
+			}
+		}
+		if (runLabels[i] == 0) // 没有与前一列的任何run重合
+		{
+			runLabels[i] = idxLabel++;
+		}
+
+	}
+}
+
+void replaceSameLabel(vector<int>& runLabels, vector<pair<int, int>>&
+	equivalence)
+{
+	int maxLabel = *max_element(runLabels.begin(), runLabels.end());
+	vector<vector<bool>> eqTab(maxLabel, vector<bool>(maxLabel, false));
+	vector<pair<int, int>>::iterator vecPairIt = equivalence.begin();
+	while (vecPairIt != equivalence.end())
+	{
+		eqTab[vecPairIt->first - 1][vecPairIt->second - 1] = true;
+		eqTab[vecPairIt->second - 1][vecPairIt->first - 1] = true;
+		vecPairIt++;
+	}
+	vector<int> labelFlag(maxLabel, 0);
+	vector<vector<int>> equaList;
+	vector<int> tempList;
+	cout << maxLabel << endl;
+	for (int i = 1; i <= maxLabel; i++)
+	{
+		if (labelFlag[i - 1])
+		{
+			continue;
+		}
+		labelFlag[i - 1] = equaList.size() + 1;
+		tempList.push_back(i);
+		for (vector<int>::size_type j = 0; j < tempList.size(); j++)
+		{
+			for (vector<bool>::size_type k = 0; k != eqTab[tempList[j] - 1].size(); k++)
+			{
+				if (eqTab[tempList[j] - 1][k] && !labelFlag[k])
+				{
+					tempList.push_back(k + 1);
+					labelFlag[k] = equaList.size() + 1;
+				}
+			}
+		}
+		equaList.push_back(tempList);
+		tempList.clear();
+	}
+	cout << equaList.size() << endl;
+	for (vector<int>::size_type i = 0; i != runLabels.size(); i++)
+	{
+		runLabels[i] = labelFlag[runLabels[i] - 1];
+	}
+}
+
+void fillImage(Mat& labelImg, vector<int>& stRun, vector<int>& enRun, vector<int>& rowRun, vector<int>& runLabels) {
+	int NumberOfRuns = stRun.size();
+	int curRowIdx = -1;
+	int* rowData = nullptr;
+	for (int i = 0; i < NumberOfRuns; i++) {
+		if (rowRun[i] != curRowIdx)
+		{
+			curRowIdx = rowRun[i];
+			rowData = labelImg.ptr<int>(rowRun[i]);
+		}
+		for (int j = stRun[i]; j <= enRun[i]; j++) {
+			rowData[j] = runLabels[i];
+		}
+	}
+}
+
+void findConnectedProposal(const Mat& bwImage, Mat& labelImg) {
+	int NumberOfRuns = 0;
+	vector<int> stRun;
+	vector<int> enRun;
+	vector<int> rowRun;
+	fillRunVectors(bwImage, NumberOfRuns, stRun, enRun, rowRun);
+
+	vector<pair<int, int>> equivalences;
+	vector<int> runLabels;
+	int offset = 1;   // 0是四邻域连通，1是八邻域连通
+	firstPass(stRun, enRun, rowRun, NumberOfRuns, runLabels, equivalences, offset);
+
+	replaceSameLabel(runLabels, equivalences);
+
+	labelImg = Mat(bwImage.size(), CV_32SC1, Scalar(0));
+	fillImage(labelImg, stRun, enRun, rowRun, runLabels);
+}
+
+cv::Scalar GetRandomColor()
+{
+	uchar r = 255 * (rand() / (1.0 + RAND_MAX));
+	uchar g = 255 * (rand() / (1.0 + RAND_MAX));
+	uchar b = 255 * (rand() / (1.0 + RAND_MAX));
+	return cv::Scalar(b, g, r);
+}
+
+
+void LabelColor(const cv::Mat& labelImg, cv::Mat& colorLabelImg)
+{
+	int num = 0;
+	if (labelImg.empty() ||
+		labelImg.type() != CV_32SC1)
+	{
+		return;
+	}
+
+	std::map<int, cv::Scalar> colors;
+
+	int rows = labelImg.rows;
+	int cols = labelImg.cols;
+
+	colorLabelImg.release();
+	colorLabelImg.create(rows, cols, CV_8UC3);
+	colorLabelImg = cv::Scalar::all(0);
+
+	for (int i = 0; i < rows; i++)
+	{
+		const int* data_src = (int*)labelImg.ptr<int>(i);
+		uchar* data_dst = colorLabelImg.ptr<uchar>(i);
+		for (int j = 0; j < cols; j++)
+		{
+			int pixelValue = data_src[j];
+			if (pixelValue > 1)
+			{
+				if (colors.count(pixelValue) <= 0)
+				{
+					colors[pixelValue] = GetRandomColor();
+					num++;
+				}
+
+				cv::Scalar color = colors[pixelValue];
+				*data_dst++ = color[0];
+				*data_dst++ = color[1];
+				*data_dst++ = color[2];
+			}
+			else
+			{
+				data_dst++;
+				data_dst++;
+				data_dst++;
+			}
+		}
+	}
+
+	printf("color num : %d \n", num);
+}
+
+
+void Two_Pass(const cv::Mat& _binImg, cv::Mat& _lableImg)
 {
 	//connected component analysis (4-component)
 	//use two-pass algorithm
@@ -203,7 +326,7 @@ void Two_PassOld(const cv::Mat& _binImg, cv::Mat& _lableImg)
 
 
 //---------------------------------【种子填充法老版】-------------------------------
-void SeedFillOld(const cv::Mat& binImg, cv::Mat& lableImg)   //种子填充法
+void SeedFill(const cv::Mat& binImg, cv::Mat& lableImg)   //种子填充法
 {
 	// 4邻接方法
 
@@ -265,195 +388,34 @@ void SeedFillOld(const cv::Mat& binImg, cv::Mat& lableImg)   //种子填充法
 
 
 
-
-//-------------------------------------------【种子填充法新版】---------------------------
-void SeedFillNew(const cv::Mat& _binImg, cv::Mat& _lableImg)
-{
-	// connected component analysis(4-component)
-	// use seed filling algorithm
-	// 1. begin with a forgeground pixel and push its forground neighbors into a stack;
-	// 2. pop the pop pixel on the stack and label it with the same label until the stack is empty
-	// 
-	//  forground pixel: _binImg(x,y)=1
-	//  background pixel: _binImg(x,y) = 0
-
-
-	if (_binImg.empty() ||
-		_binImg.type() != CV_8UC1)
-	{
-		return;
-	}
-
-	_lableImg.release();
-	_binImg.convertTo(_lableImg, CV_32SC1);
-
-	int label = 0; //start by 1
-
-	int rows = _binImg.rows;
-	int cols = _binImg.cols;
-
-	Mat mask(rows, cols, CV_8UC1);
-	mask.setTo(0);
-	int* lableptr;
-	for (int i = 0; i < rows; i++)
-	{
-		int* data = _lableImg.ptr<int>(i);
-		uchar* masKptr = mask.ptr<uchar>(i);
-		for (int j = 0; j < cols; j++)
-		{
-			if (data[j] == 255 && mask.at<uchar>(i, j) != 1)
-			{
-				mask.at<uchar>(i, j) = 1;
-				std::stack<std::pair<int, int>> neighborPixels;
-				neighborPixels.push(std::pair<int, int>(i, j)); // pixel position: <i,j>
-				++label; //begin with a new label
-				while (!neighborPixels.empty())
-				{
-					//get the top pixel on the stack and label it with the same label
-					std::pair<int, int> curPixel = neighborPixels.top();
-					int curY = curPixel.first;
-					int curX = curPixel.second;
-					_lableImg.at<int>(curY, curX) = label;
-
-					//pop the top pixel
-					neighborPixels.pop();
-
-					//push the 4-neighbors(foreground pixels)
-
-					if (curX - 1 >= 0)
-					{
-						if (_lableImg.at<int>(curY, curX - 1) == 255 && mask.at<uchar>(curY, curX - 1) != 1) //leftpixel
-						{
-							neighborPixels.push(std::pair<int, int>(curY, curX - 1));
-							mask.at<uchar>(curY, curX - 1) = 1;
-						}
-					}
-					if (curX + 1 <= cols - 1)
-					{
-						if (_lableImg.at<int>(curY, curX + 1) == 255 && mask.at<uchar>(curY, curX + 1) != 1)
-							// right pixel
-						{
-							neighborPixels.push(std::pair<int, int>(curY, curX + 1));
-							mask.at<uchar>(curY, curX + 1) = 1;
-						}
-					}
-					if (curY - 1 >= 0)
-					{
-						if (_lableImg.at<int>(curY - 1, curX) == 255 && mask.at<uchar>(curY - 1, curX) != 1)
-							// up pixel
-						{
-							neighborPixels.push(std::pair<int, int>(curY - 1, curX));
-							mask.at<uchar>(curY - 1, curX) = 1;
-						}
-					}
-					if (curY + 1 <= rows - 1)
-					{
-						if (_lableImg.at<int>(curY + 1, curX) == 255 && mask.at<uchar>(curY + 1, curX) != 1)
-							//down pixel
-						{
-							neighborPixels.push(std::pair<int, int>(curY + 1, curX));
-							mask.at<uchar>(curY + 1, curX) = 1;
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-
-//---------------------------------【颜色标记程序】-----------------------------------
-//彩色显示
-cv::Scalar GetRandomColor()
-{
-	uchar r = 255 * (rand() / (1.0 + RAND_MAX));
-	uchar g = 255 * (rand() / (1.0 + RAND_MAX));
-	uchar b = 255 * (rand() / (1.0 + RAND_MAX));
-	return cv::Scalar(b, g, r);
-}
-
-
-void LabelColor(const cv::Mat& labelImg, cv::Mat& colorLabelImg)
-{
-	int num = 0;
-	if (labelImg.empty() ||
-		labelImg.type() != CV_32SC1)
-	{
-		return;
-	}
-
-	std::map<int, cv::Scalar> colors;
-
-	int rows = labelImg.rows;
-	int cols = labelImg.cols;
-
-	colorLabelImg.release();
-	colorLabelImg.create(rows, cols, CV_8UC3);
-	colorLabelImg = cv::Scalar::all(0);
-
-	for (int i = 0; i < rows; i++)
-	{
-		const int* data_src = (int*)labelImg.ptr<int>(i);
-		uchar* data_dst = colorLabelImg.ptr<uchar>(i);
-		for (int j = 0; j < cols; j++)
-		{
-			int pixelValue = data_src[j];
-			if (pixelValue > 1)
-			{
-				if (colors.count(pixelValue) <= 0)
-				{
-					colors[pixelValue] = GetRandomColor();
-					num++;
-				}
-
-				cv::Scalar color = colors[pixelValue];
-				*data_dst++ = color[0];
-				*data_dst++ = color[1];
-				*data_dst++ = color[2];
-			}
-			else
-			{
-				data_dst++;
-				data_dst++;
-				data_dst++;
-			}
-		}
-	}
-
-	printf("color num : %d \n", num);
-}
-
-//------------------------------------------【测试主程序】-------------------------------------
-int main()
-{
+int main() {
 
 	cv::Mat binImage = cv::imread("3.png", 0);
+	// 原图显示
+	imshow("binImage", binImage);
+	// 二值化
 	cv::threshold(binImage, binImage, 50, 1, THRESH_BINARY);
+
 	cv::Mat labelImg;
 	double time;
 	time = getTickCount();
-	//对应四种方法，需要哪一种，则调用哪一种
-	//Two_PassOld(binImage, labelImg);
-	Two_PassNew(binImage, labelImg);
-	//SeedFillOld(binImage, labelImg);
-	//SeedFillNew(binImage, labelImg);
+	//findConnectedProposal(binImage, labelImg);
+	//Two_Pass(binImage, labelImg);
+	SeedFill(binImage, labelImg);
 	time = 1000 * ((double)getTickCount() - time) / getTickFrequency();
 	cout << std::fixed << time << "ms" << endl;
+
+
 	//彩色显示
 	cv::Mat colorLabelImg;
-	LabelColor(labelImg, colorLabelImg);
+	LabelColor(labelImg * 10, colorLabelImg);
 	cv::imshow("colorImg", colorLabelImg);
-	//灰度显示
-	//cv::Mat grayImg;
-	//labelImg *= 10;
-	//labelImg.convertTo(grayImg, CV_8UC1);
-	//cv::imshow("labelImg", grayImg);
-	double minval, maxval;
-	minMaxLoc(labelImg, &minval, &maxval);
-	cout << "minval" << minval << endl;
-	cout << "maxval" << maxval << endl;
-	cv::waitKey(0);
-	return 0;
+
+	////灰度显示
+	cv::Mat grayImg;
+	labelImg *= 10;
+	labelImg.convertTo(grayImg, CV_8UC1);
+	imshow("labelImg", grayImg);
+
+	waitKey(0);
 }
-
-
